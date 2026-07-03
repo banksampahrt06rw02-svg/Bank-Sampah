@@ -1,0 +1,6 @@
+{
+  "name": "Bank Sampah",
+  "description": "Aplikasi Bank Sampah modern dengan sistem manajemen setoran, penarikan, pengurus, laporan real-time, ekspor Excel, dan dukungan mode gelap.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
