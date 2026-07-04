@@ -78,6 +78,34 @@ object BankDatabaseManager {
         val set = prefs.getStringSet(KEY_ALL_BANKS, null) ?: setOf("Bank Sampah Sejahtera")
         return set.toList().sorted()
     }
+
+    fun deleteBank(context: Context, bankName: String): Boolean {
+        val trimmed = bankName.trim()
+        val defaultBank = "Bank Sampah Sejahtera"
+        if (trimmed == defaultBank) return false
+        
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val all = getAllBanks(context).toMutableSet()
+        if (all.remove(trimmed)) {
+            prefs.edit().putStringSet(KEY_ALL_BANKS, all).apply()
+            
+            // If the deleted bank was the active bank, fallback to default
+            val active = getActiveBank(context)
+            if (active == trimmed) {
+                setActiveBank(context, defaultBank)
+            }
+            
+            // Delete Room database files
+            val dbName = getDbNameForBank(trimmed)
+            try {
+                context.deleteDatabase(dbName)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return true
+        }
+        return false
+    }
     
     fun getDbNameForBank(bankName: String): String {
         val normalized = bankName.lowercase()

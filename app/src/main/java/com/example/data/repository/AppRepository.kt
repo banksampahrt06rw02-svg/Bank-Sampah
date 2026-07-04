@@ -55,6 +55,8 @@ class AppRepository(
         notificationLogDao.insertNotification(NotificationLog(userId = userId, title = title, message = message))
     }
     suspend fun markAllAsRead(userId: Int) = notificationLogDao.markAllAsRead(userId)
+    suspend fun markAsRead(id: Int) = notificationLogDao.markAsRead(id)
+    suspend fun markAllAsReadForUserAndBroadcast(userId: Int) = notificationLogDao.markAllAsReadForUserAndBroadcast(userId)
 
     // Waste Categories
     fun getAllCategoriesFlow(): Flow<List<WasteCategory>> = wasteCategoryDao.getAllCategoriesFlow()
@@ -118,6 +120,17 @@ class AppRepository(
             for ((name, price) in defaultCategories) {
                 wasteCategoryDao.insertCategory(WasteCategory(name, price))
             }
+
+            // Prepopulate a welcome announcement notification customized for this bank
+            notificationLogDao.insertNotification(
+                NotificationLog(
+                    userId = 0, // Broadcast to all users
+                    title = "Selamat Datang di $bankName!",
+                    message = "Terima kasih telah bergabung dengan $bankName. Mari bersama-sama menyetorkan sampah, menjaga lingkungan, dan mengumpulkan saldo tabungan!",
+                    timestamp = System.currentTimeMillis(),
+                    isRead = false
+                )
+            )
         }
     }
 

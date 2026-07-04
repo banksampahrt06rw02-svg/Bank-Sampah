@@ -59,6 +59,9 @@ fun MainAppContent(viewModel: AppViewModel) {
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val appName by viewModel.appName.collectAsStateWithLifecycle()
     val isDarkMode by viewModel.isDarkMode.collectAsStateWithLifecycle()
+    val myNotifications by viewModel.myNotifications.collectAsStateWithLifecycle()
+    val unreadNotifications = remember(myNotifications) { myNotifications.filter { !it.isRead } }
+    val activeAlertNotif = unreadNotifications.firstOrNull()
     val context = LocalContext.current
 
     // Dialog state controllers
@@ -149,6 +152,68 @@ fun MainAppContent(viewModel: AppViewModel) {
             }
 
             // Dialog displays
+            if (currentUser != null && activeAlertNotif != null) {
+                AlertDialog(
+                    onDismissRequest = { 
+                        viewModel.markNotificationAsRead(activeAlertNotif.id)
+                    },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.NotificationsActive,
+                                contentDescription = "Announcement",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Text(
+                                text = "Pengumuman Baru",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    },
+                    text = {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = activeAlertNotif.title,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = activeAlertNotif.message,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = formatDateTime(activeAlertNotif.timestamp),
+                                fontSize = 10.sp,
+                                color = Color.Gray,
+                                modifier = Modifier.align(Alignment.End)
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.markNotificationAsRead(activeAlertNotif.id)
+                            },
+                            modifier = Modifier.testTag("dismiss_announcement_alert_btn")
+                        ) {
+                            Text("Saya Mengerti")
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
+
             if (showAddUser) {
                 AddUserDialog(
                     viewModel = viewModel,
@@ -212,10 +277,19 @@ fun LoginScreen(viewModel: AppViewModel) {
     var phone by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
 
+    val activeBank by viewModel.activeBank.collectAsStateWithLifecycle()
+    var targetBankName by remember { mutableStateOf("") }
+
     var registerError by remember { mutableStateOf<String?>(null) }
 
     val loginError by viewModel.loginError.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    LaunchedEffect(isRegisterMode) {
+        if (isRegisterMode) {
+            viewModel.refreshBanksList()
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -227,7 +301,7 @@ fun LoginScreen(viewModel: AppViewModel) {
         item {
             Spacer(modifier = Modifier.height(10.dp))
             Image(
-                painter = painterResource(id = R.drawable.bank_sampah_logo_clean_1782856661953),
+                painter = painterResource(id = R.drawable.bank_sampah_icon_1783080869252),
                 contentDescription = "Bank Sampah Logo",
                 modifier = Modifier
                     .size(120.dp)
@@ -268,6 +342,9 @@ fun LoginScreen(viewModel: AppViewModel) {
                     )
 
                     if (isRegisterMode) {
+                        val allBanks by viewModel.allBanksList.collectAsStateWithLifecycle()
+                        var bankDropdownExpanded by remember { mutableStateOf(false) }
+
                         OutlinedTextField(
                             value = fullName,
                             onValueChange = { fullName = it },
@@ -313,6 +390,45 @@ fun LoginScreen(viewModel: AppViewModel) {
                             modifier = Modifier.fillMaxWidth().testTag("reg_address_input"),
                             singleLine = true
                         )
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = targetBankName,
+                                onValueChange = { 
+                                    targetBankName = it
+                                    bankDropdownExpanded = true
+                                },
+                                label = { Text("Bank Sampah Tujuan") },
+                                leadingIcon = { Icon(Icons.Filled.Business, "Bank") },
+                                trailingIcon = {
+                                    IconButton(onClick = { bankDropdownExpanded = !bankDropdownExpanded }) {
+                                        Icon(
+                                            imageVector = if (bankDropdownExpanded) Icons.Filled.ArrowDropUp else Icons.Filled.ArrowDropDown,
+                                            contentDescription = "Pilih Bank"
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().testTag("reg_bank_input"),
+                                singleLine = true,
+                                placeholder = { Text("Ketik atau pilih nama bank") }
+                            )
+                            
+                            DropdownMenu(
+                                expanded = bankDropdownExpanded,
+                                onDismissRequest = { bankDropdownExpanded = false },
+                                modifier = Modifier.fillMaxWidth(0.9f)
+                            ) {
+                                allBanks.forEach { bank ->
+                                    DropdownMenuItem(
+                                        text = { Text(bank) },
+                                        onClick = {
+                                            targetBankName = bank
+                                            bankDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     OutlinedTextField(
@@ -365,12 +481,17 @@ fun LoginScreen(viewModel: AppViewModel) {
                                 val trimmedUser = username.trim()
                                 val trimmedPhone = phone.trim()
                                 val trimmedAddress = address.trim()
+                                val trimmedBank = targetBankName.trim()
 
-                                if (trimmedFull.isEmpty() || trimmedNik.length < 16 || trimmedUser.isEmpty() || password.isEmpty()) {
-                                    registerError = "Mohon lengkapi semua data wajib (Nama Lengkap, NIK 16 digit, Username, & Password)!"
+                                if (trimmedFull.isEmpty() || trimmedNik.length < 16 || trimmedUser.isEmpty() || password.isEmpty() || trimmedBank.isEmpty()) {
+                                    registerError = "Mohon lengkapi semua data wajib (Nama Lengkap, NIK 16 digit, Bank Tujuan, Username, & Password)!"
                                     return@Button
                                 }
                                 registerError = null
+
+                                // Switch active bank database to the chosen one so registration registers into the selected database!
+                                viewModel.switchBank(trimmedBank)
+
                                 viewModel.registerUser(
                                     username = trimmedUser,
                                     password = password,
@@ -381,9 +502,10 @@ fun LoginScreen(viewModel: AppViewModel) {
                                     nik = trimmedNik
                                 ) { success, msg ->
                                     if (success) {
-                                        Toast.makeText(context, "Registrasi berhasil! Silakan masuk.", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "Registrasi berhasil di $trimmedBank! Silakan masuk.", Toast.LENGTH_LONG).show()
                                         isRegisterMode = false
                                         registerError = null
+                                        targetBankName = ""
                                     } else {
                                         registerError = msg
                                     }
@@ -414,6 +536,7 @@ fun LoginScreen(viewModel: AppViewModel) {
                         onClick = {
                             isRegisterMode = !isRegisterMode
                             registerError = null
+                            targetBankName = ""
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
@@ -763,6 +886,7 @@ fun AdminDashboard(
                 val allBanks by viewModel.allBanksList.collectAsStateWithLifecycle()
                 var showBankListDialog by remember { mutableStateOf(false) }
                 var newBankNameInput by remember { mutableStateOf("") }
+                var bankToDelete by remember { mutableStateOf<String?>(null) }
                 
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -861,25 +985,55 @@ fun AdminDashboard(
                                         Card(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(vertical = 4.dp)
-                                                .clickable {
-                                                    viewModel.switchBank(bank)
-                                                    showBankListDialog = false
-                                                    Toast.makeText(context, "Beralih ke database: $bank", Toast.LENGTH_SHORT).show()
-                                                },
+                                                .padding(vertical = 4.dp),
                                             colors = CardDefaults.cardColors(
                                                 containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
                                             ),
                                             shape = RoundedCornerShape(8.dp)
                                         ) {
                                             Row(
-                                                modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(bank, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                                                if (isSelected) {
-                                                    Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                                Row(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clickable {
+                                                            viewModel.switchBank(bank)
+                                                            showBankListDialog = false
+                                                            Toast.makeText(context, "Beralih ke database: $bank", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                        .padding(12.dp)
+                                                        .testTag("bank_item_${bank.replace(" ", "_")}"),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = bank,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    if (isSelected) {
+                                                        Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                                    }
+                                                }
+
+                                                if (bank != "Bank Sampah Sejahtera") {
+                                                    IconButton(
+                                                        onClick = {
+                                                            bankToDelete = bank
+                                                        },
+                                                        modifier = Modifier
+                                                            .padding(end = 4.dp)
+                                                            .testTag("delete_bank_btn_${bank.replace(" ", "_")}")
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Delete,
+                                                            contentDescription = "Hapus Bank",
+                                                            tint = MaterialTheme.colorScheme.error
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -890,6 +1044,44 @@ fun AdminDashboard(
                         confirmButton = {
                             TextButton(onClick = { showBankListDialog = false }) {
                                 Text("Tutup")
+                            }
+                        }
+                    )
+                }
+
+                if (bankToDelete != null) {
+                    AlertDialog(
+                        onDismissRequest = { bankToDelete = null },
+                        title = { Text("Hapus Bank Sampah?", fontWeight = FontWeight.Bold) },
+                        text = {
+                            Text(
+                                "Apakah Anda yakin ingin menghapus '${bankToDelete}'? Semua data nasabah, transaksi, tabungan, dan konfigurasi pada bank sampah ini akan DIHAPUS PERMANEN dari sistem!",
+                                fontSize = 14.sp
+                            )
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val target = bankToDelete
+                                    if (target != null) {
+                                        viewModel.deleteBank(target) { success, msg ->
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            if (success) {
+                                                showBankListDialog = false
+                                            }
+                                        }
+                                    }
+                                    bankToDelete = null
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                modifier = Modifier.testTag("confirm_delete_bank_btn")
+                            ) {
+                                Text("Ya, Hapus Permanen", fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { bankToDelete = null }) {
+                                Text("Batal")
                             }
                         }
                     )

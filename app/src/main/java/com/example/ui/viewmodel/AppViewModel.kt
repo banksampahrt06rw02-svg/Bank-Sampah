@@ -108,6 +108,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun deleteBank(bankName: String, onCompleted: (Boolean, String) -> Unit) {
+        val trimmed = bankName.trim()
+        val defaultBank = "Bank Sampah Sejahtera"
+        if (trimmed == defaultBank) {
+            onCompleted(false, "Bank utama tidak dapat dihapus!")
+            return
+        }
+        val context = getApplication<Application>()
+        val success = com.example.data.database.BankDatabaseManager.deleteBank(context, trimmed)
+        if (success) {
+            refreshBanksList()
+            val currentActive = com.example.data.database.BankDatabaseManager.getActiveBank(context)
+            if (_activeBank.value != currentActive) {
+                _activeBank.value = currentActive
+                updateActiveRepository(currentActive)
+            }
+            onCompleted(true, "Bank $trimmed berhasil dihapus.")
+        } else {
+            onCompleted(false, "Gagal menghapus bank $trimmed.")
+        }
+    }
+
     // App Name Dynamic Config
     val appName: StateFlow<String> = _activeBank
         .flatMapLatest { bank ->
@@ -141,6 +163,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val db = AppDatabase.getDatabase(application, bank)
             db.userDao().getAllUsers()
         }
+        .map { list -> list.filter { it.role != "ADMIN" } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val allTransactions: StateFlow<List<Transaction>> = _activeBank
@@ -199,6 +222,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             flowOf(emptyList())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun markNotificationAsRead(id: Int) {
+        viewModelScope.launch {
+            val bank = _activeBank.value
+            val db = AppDatabase.getDatabase(getApplication<Application>(), bank)
+            db.notificationLogDao().markAsRead(id)
+        }
+    }
+
+    fun markAllNotificationsAsRead() {
+        viewModelScope.launch {
+            val user = _currentUser.value ?: return@launch
+            val bank = _activeBank.value
+            val db = AppDatabase.getDatabase(getApplication<Application>(), bank)
+            db.notificationLogDao().markAllAsReadForUserAndBroadcast(user.id)
+        }
+    }
 
     // Real-time Dashboard Statistics
     val statsTotalWeight: StateFlow<Double> = allTransactions

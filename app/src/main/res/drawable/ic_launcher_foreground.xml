@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/bank_sampah_logo_clean_1782856661953"
+        android:drawable="@drawable/bank_sampah_icon_1783080869252"
         android:gravity="center" />
 </layer-list>
